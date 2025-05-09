@@ -311,7 +311,7 @@ label_order <- c(
 )
 
 r2_results$label <- factor(r2_results$label, levels = label_order)
-r2_results %>%  knitr::kable()
+r2_results %>% arrange(desc(label)) %>% knitr::kable()
 ```
 
 ```{r}

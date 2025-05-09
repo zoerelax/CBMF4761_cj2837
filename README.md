@@ -40,17 +40,14 @@ These datasets have restricted access; this code demonstrates the workflow.
   - `tidyverse`
   - `data.table`
   - `ggplot2`
-  - `gridExtra`
-  - `reshape2`
-  - `scales`
+  - `bhr`
+  - `readxl`
+  - `patchwork`
   - `knitr`
   - `rmarkdown`
 
-Ensure all packages are installed before running the RMarkdown files. You can install missing packages with:
+Ensure all packages are installed before running the RMarkdown files.
 
-```r
-install.packages(c("tidyverse", "data.table", "ggplot2", "gridExtra", "reshape2", "scales", "knitr", "rmarkdown"))
-```
 ## ✍️ Author and Credits
 
 - Code and analysis: Chunni Ji

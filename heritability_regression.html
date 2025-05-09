@@ -1934,11 +1934,10 @@ label_order &lt;- c(
 )
 
 r2_results$label &lt;- factor(r2_results$label, levels = label_order)
-r2_results %&gt;%  knitr::kable()</code></pre>
+r2_results %&gt;% arrange(desc(label)) %&gt;% knitr::kable()</code></pre>
 <table>
 <thead>
 <tr class="header">
-<th align="left"></th>
 <th align="left">variable</th>
 <th align="right">delta_r2</th>
 <th align="right">h2_liability</th>
@@ -1948,23 +1947,6 @@ r2_results %&gt;%  knitr::kable()</code></pre>
 </thead>
 <tbody>
 <tr class="odd">
-<td align="left">12</td>
-<td align="left">lgd_bin6</td>
-<td align="right">0.0070617</td>
-<td align="right">0.0085735</td>
-<td align="left">Shet 0.2–0.4</td>
-<td align="left">LGD</td>
-</tr>
-<tr class="even">
-<td align="left">11</td>
-<td align="left">lgd_bin5</td>
-<td align="right">0.0069125</td>
-<td align="right">0.0083923</td>
-<td align="left">Shet 0.1–0.2</td>
-<td align="left">LGD</td>
-</tr>
-<tr class="odd">
-<td align="left">6</td>
 <td align="left">mis_bin6</td>
 <td align="right">0.0034117</td>
 <td align="right">0.0041421</td>
@@ -1972,39 +1954,6 @@ r2_results %&gt;%  knitr::kable()</code></pre>
 <td align="left">Missense</td>
 </tr>
 <tr class="even">
-<td align="left">10</td>
-<td align="left">lgd_bin4</td>
-<td align="right">0.0017968</td>
-<td align="right">0.0021815</td>
-<td align="left">Shet 0.05–0.1</td>
-<td align="left">LGD</td>
-</tr>
-<tr class="odd">
-<td align="left">7</td>
-<td align="left">lgd_bin1</td>
-<td align="right">0.0015798</td>
-<td align="right">0.0019180</td>
-<td align="left">Shet &lt;0.005</td>
-<td align="left">LGD</td>
-</tr>
-<tr class="even">
-<td align="left">13</td>
-<td align="left">lgd_bin7</td>
-<td align="right">0.0015394</td>
-<td align="right">0.0018690</td>
-<td align="left">Shet &gt;0.4</td>
-<td align="left">LGD</td>
-</tr>
-<tr class="odd">
-<td align="left">4</td>
-<td align="left">mis_bin4</td>
-<td align="right">0.0008654</td>
-<td align="right">0.0010507</td>
-<td align="left">MisFit 0.02–0.03</td>
-<td align="left">Missense</td>
-</tr>
-<tr class="even">
-<td align="left">5</td>
 <td align="left">mis_bin5</td>
 <td align="right">0.0005951</td>
 <td align="right">0.0007225</td>
@@ -2012,31 +1961,13 @@ r2_results %&gt;%  knitr::kable()</code></pre>
 <td align="left">Missense</td>
 </tr>
 <tr class="odd">
-<td align="left">1</td>
-<td align="left">mis_bin1</td>
-<td align="right">0.0004853</td>
-<td align="right">0.0005892</td>
-<td align="left">MisFit &lt;0.005</td>
+<td align="left">mis_bin4</td>
+<td align="right">0.0008654</td>
+<td align="right">0.0010507</td>
+<td align="left">MisFit 0.02–0.03</td>
 <td align="left">Missense</td>
 </tr>
 <tr class="even">
-<td align="left">8</td>
-<td align="left">lgd_bin2</td>
-<td align="right">0.0004537</td>
-<td align="right">0.0005508</td>
-<td align="left">Shet 0.005–0.01</td>
-<td align="left">LGD</td>
-</tr>
-<tr class="odd">
-<td align="left">2</td>
-<td align="left">mis_bin2</td>
-<td align="right">0.0003232</td>
-<td align="right">0.0003924</td>
-<td align="left">MisFit 0.005–0.01</td>
-<td align="left">Missense</td>
-</tr>
-<tr class="even">
-<td align="left">3</td>
 <td align="left">mis_bin3</td>
 <td align="right">0.0002585</td>
 <td align="right">0.0003138</td>
@@ -2044,11 +1975,66 @@ r2_results %&gt;%  knitr::kable()</code></pre>
 <td align="left">Missense</td>
 </tr>
 <tr class="odd">
-<td align="left">9</td>
+<td align="left">mis_bin2</td>
+<td align="right">0.0003232</td>
+<td align="right">0.0003924</td>
+<td align="left">MisFit 0.005–0.01</td>
+<td align="left">Missense</td>
+</tr>
+<tr class="even">
+<td align="left">mis_bin1</td>
+<td align="right">0.0004853</td>
+<td align="right">0.0005892</td>
+<td align="left">MisFit &lt;0.005</td>
+<td align="left">Missense</td>
+</tr>
+<tr class="odd">
+<td align="left">lgd_bin7</td>
+<td align="right">0.0015394</td>
+<td align="right">0.0018690</td>
+<td align="left">Shet &gt;0.4</td>
+<td align="left">LGD</td>
+</tr>
+<tr class="even">
+<td align="left">lgd_bin6</td>
+<td align="right">0.0070617</td>
+<td align="right">0.0085735</td>
+<td align="left">Shet 0.2–0.4</td>
+<td align="left">LGD</td>
+</tr>
+<tr class="odd">
+<td align="left">lgd_bin5</td>
+<td align="right">0.0069125</td>
+<td align="right">0.0083923</td>
+<td align="left">Shet 0.1–0.2</td>
+<td align="left">LGD</td>
+</tr>
+<tr class="even">
+<td align="left">lgd_bin4</td>
+<td align="right">0.0017968</td>
+<td align="right">0.0021815</td>
+<td align="left">Shet 0.05–0.1</td>
+<td align="left">LGD</td>
+</tr>
+<tr class="odd">
 <td align="left">lgd_bin3</td>
 <td align="right">0.0001459</td>
 <td align="right">0.0001771</td>
 <td align="left">Shet 0.01–0.05</td>
+<td align="left">LGD</td>
+</tr>
+<tr class="even">
+<td align="left">lgd_bin2</td>
+<td align="right">0.0004537</td>
+<td align="right">0.0005508</td>
+<td align="left">Shet 0.005–0.01</td>
+<td align="left">LGD</td>
+</tr>
+<tr class="odd">
+<td align="left">lgd_bin1</td>
+<td align="right">0.0015798</td>
+<td align="right">0.0019180</td>
+<td align="left">Shet &lt;0.005</td>
 <td align="left">LGD</td>
 </tr>
 </tbody>

@@ -1,0 +1,372 @@
+---
+title: "bhr_functional_variant"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    number_sections: true
+    theme: paper
+date: "2025-04-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(data.table)
+library(ggplot2)
+library(bhr)
+library(data.table)
+library(knitr)
+library(readxl)
+```
+
+## variant types
+
+```{r}
+# Define variant categories
+mis_def <- c("missense",
+             "inframe_deletion",
+             "inframe_insertion")
+
+syn_def <- c("synonymous")
+             # "synonymous&inframe_deletion&splice_acceptor",
+             # "synonymous&inframe_deletion&splice_donor",
+             # "synonymous&frameshift&splice_acceptor",
+             # "synonymous&frameshift&splice_donor",
+             # "synonymous&splice_donor",
+             # "synonymous&splice_acceptor",
+             # "synonymous&splice_acceptor&coding_sequence",
+             # "synonymous&splice_donor&coding_sequence")
+
+lgd_def <- c("frameshift",
+             "frameshift&splice_acceptor",
+             "frameshift&splice_donor",
+             "frameshift&splice_donor&start_lost",
+             "frameshift&splice_region",
+             "frameshift&start_lost",
+             "frameshift&start_lost&splice_region",
+             "frameshift&stop_retained",
+             "inframe_deletion&splice_donor",
+             "inframe_deletion&splice_region",
+             "inframe_deletion&start_lost",
+             "inframe_deletion&start_lost&splice_region",
+             "inframe_deletion&stop_retained",
+             "inframe_insertion&stop_retained",
+             "splice_acceptor",
+             "splice_acceptor&5_prime_utr",
+             "splice_acceptor&coding_sequence",
+             "splice_acceptor&splice_region",
+             "splice_donor",
+             "splice_donor&5_prime_utr",
+             "splice_donor&coding_sequence",
+             "splice_region&3_prime_utr",
+             "splice_region&5_prime_utr",
+             "splice_region&stop_retained",
+             "start_lost",
+             "start_lost&splice_region",
+             "stop_gained",
+             "stop_gained&frameshift",
+             "stop_gained&inframe_insertion",
+             "stop_gained&inframe_deletion",
+             "stop_gained&stop_retained",
+             "stop_lost",
+             "stop_lost&frameshift",
+             "stop_lost&frameshift&splice_region",
+             "stop_lost&inframe_deletion",
+             "stop_lost&splice_region",
+             "stop_retained")
+```
+
+## data
+
+### load misc data
+
+```{r}
+# gene name and ensg conversions
+conversion <- fread("~/Documents/Yufeng_Lab/data/gene_ensg_conversion.tsv",  sep = "\t",  header = FALSE) %>% 
+  select(V3, V4) %>%
+  distinct()
+colnames(conversion) <- c("canon_gene", "gene_id") # c("CHROM", "POS", "gene_label", "gene_id")
+conversion$gene_id <- conversion$gene_id %>% substr(1, 15)
+
+# shet data
+shet <- read_excel("~/Documents/Yufeng_Lab/data/shet.xlsx", 
+    sheet = "Supplementary Table 1") %>%
+  rename(shet = post_mean,
+         gene_id = ensg) %>%
+  select(gene_id, shet)
+
+spark_meta <- fread("~/Documents/Yufeng_Lab/data/all_iWES3_samples.txt",  sep = "\t") %>% 
+  dplyr::select(spid, sex, asd) %>% distinct() %>%
+  rename(sample_id = spid)
+
+ukbb_meta <- fread("~/Documents/Yufeng_Lab/data/UKBB_200k.ped",  sep = "\t") %>% 
+  dplyr::select(iID, sex) %>% distinct() %>%
+  rename(sample_id = iID)
+```
+
+### load case/control data
+
+```{r}
+spark <- fread("~/Documents/Yufeng_Lab/data/iWES3_RareVar_topmedAF_QCfilter_1e-4.txt", sep="\t") %>%
+  left_join(conversion, by = c("canon_gene")) %>%
+  left_join(shet, by = c("gene_id")) %>%
+  left_join(spark_meta, by="sample_id") %>%
+  ### keep only females
+  filter(sex == 2)
+Ncases <- spark$sample_id %>% unique %>% length
+print(Ncases)
+```
+
+```{r}
+UKBB <- fread("~/Documents/Yufeng_Lab/data/UKBB_RareVar_topmedAF_QCfilter_1e-4.txt", sep="\t") %>%
+  left_join(conversion, by = c("canon_gene")) %>%
+  left_join(shet, by = c("gene_id")) %>%
+  left_join(ukbb_meta, by="sample_id") %>%
+  ### keep only females
+  filter(sex == 2)
+
+Ncontrols <- UKBB$sample_id %>% unique %>% length
+print(Ncontrols)
+```
+
+
+## Grouping
+
+```{r}
+spark_missense <- spark %>%
+  filter(canon_Consequence == "missense") %>%
+  filter(MisFit_S != -1)
+misfit_quantile <- quantile(spark_missense$MisFit_S, probs = seq(0, 1, 0.01)) %>% as.vector
+misfit_cutoffs <- append(misfit_quantile[1:95], c(0.005, 0.006, 0.007, 0.008, 0.01, 0.015, 0.02, 0.03, 0.04))
+
+spark_lgd <- spark %>%
+  filter(canon_Consequence %in% lgd_def) %>%
+  filter(!is.na(shet))
+shet_quantile <- quantile(spark_lgd$shet, probs = seq(0, 1, 0.1)) %>% as.vector
+shet_cutoffs <- append(shet_quantile[1:7], c(0.005, 0.008, 0.01, 0.02, 0.03, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5))
+
+# Assign functional groups for SPARK
+spark1 <- spark %>%
+  mutate(
+    functional_group = case_when(
+      canon_Consequence %in% syn_def ~ "synonymous",
+      
+      # LGD grouping
+      canon_Consequence %in% lgd_def & !is.na(shet) ~ paste0("lgd", findInterval(shet, shet_cutoffs, rightmost.closed = TRUE)),
+    
+      # Missense grouping into bins
+      canon_Consequence %in% mis_def & MisFit_S != -1 ~ paste0("mis", findInterval(MisFit_S, misfit_cutoffs, rightmost.closed = TRUE)),
+      
+      TRUE ~ NA_character_
+    )
+  )
+
+# Assign functional groups for UKBB
+UKBB1 <- UKBB %>%
+  mutate(
+    functional_group = case_when(
+      canon_Consequence %in% syn_def ~ "synonymous",
+      
+      # LGD grouping
+      canon_Consequence %in% lgd_def & !is.na(shet) ~ paste0("lgd", findInterval(shet, shet_cutoffs, rightmost.closed = TRUE)),
+
+      # Missense grouping into bins
+      canon_Consequence %in% mis_def & MisFit_S != -1 ~ paste0("mis", findInterval(MisFit_S, misfit_cutoffs, rightmost.closed = TRUE)),
+      
+      TRUE ~ NA_character_
+    )
+  )
+
+```
+
+
+```{r}
+# Count variant observations by functional group and frequency
+case_summary <- spark1 %>%
+  filter(!is.na(functional_group)) %>%
+  group_by(functional_group) %>%
+  summarise(n_variant_case = n(), .groups = "drop")
+
+control_summary <- UKBB1 %>%
+  filter(!is.na(functional_group)) %>%
+  group_by(functional_group) %>%
+  summarise(n_variant_control = n(), .groups = "drop")
+```
+
+```{r}
+# Merge case and control summaries
+rr_table <- case_summary %>%
+  left_join(control_summary, by = c("functional_group")) %>%
+  mutate(
+    # Calculate burden rate
+    Ncases = Ncases,
+    Ncontrols = Ncontrols,
+    burden_rate_case = n_variant_case / Ncases,
+    burden_rate_control = n_variant_control / Ncontrols,
+    # Calculate RR
+    RR = burden_rate_case / burden_rate_control
+  ) %>% arrange(functional_group)
+
+syn_rr <- rr_table %>%
+  filter(functional_group == "synonymous") %>%
+  pull(RR)
+
+# correct for RR.
+rr_table <- rr_table %>%
+  mutate(
+    RR_adj = RR / syn_rr
+  )
+
+rr_table <- rr_table %>%
+  rowwise() %>%
+  mutate(
+    chisq_p = if (functional_group == "synonymous") {
+      NA_real_
+    } else {
+      chisq.test(matrix(
+        c(n_variant_case, Ncases - n_variant_case,
+          n_variant_control, Ncontrols - n_variant_control),
+        nrow = 2,
+        byrow = TRUE
+      ))$p.value
+    }
+  ) %>%
+  ungroup()
+```
+
+## Calculate h^2
+
+tau: threshold on the standard normal liability scale that defines disease prevalence.
+
+beta: effect size on liability scale, shifts mean of liability.
+
+### prevalence = 14.3/1000
+
+```{r}
+# set prevalence
+prevalence <- 14.3/1000  # female ASD prevalence
+tau <- qnorm(1 - prevalence)  # Liability threshold
+
+# define a function to solve for beta given RR_adj
+solve_beta <- function(RR_adj, tau) {
+  # Function to find root
+  f <- function(beta) {
+    (1 - pnorm(tau, mean = beta, sd = 1)) / (1 - pnorm(tau)) - RR_adj
+  }
+  
+  # Solve using uniroot
+  tryCatch({
+    uniroot(f, lower = -5, upper = 5)$root
+  }, error = function(e) NA)  # Return NA if fails
+}
+
+# calculate beta, p, 2pq, and h^2
+h2_table <- rr_table %>%
+  rowwise() %>%
+  mutate(
+    beta = solve_beta(RR_adj, tau),
+    burden_rate_case = n_variant_case / Ncases,
+    burden_rate_control = n_variant_control / Ncontrols,
+    burden_rate_total = (n_variant_case + n_variant_control) / (2 * (Ncases + Ncontrols)),
+    p = burden_rate_total,  # Approximate allele frequency from burden
+    var_2pq = 2 * p * (1 - p),
+    h2 = beta^2 * var_2pq
+  ) %>%
+  ungroup()
+```
+
+```{r}
+h2_partition_table <- h2_table %>%
+  filter(functional_group != "synonymous")
+```
+
+```{r}
+# For Missense
+misfit_bins <- c(-Inf, 0.005, 0.01, 0.02, 0.03, 0.04, Inf)
+misfit_labels <- c("MisFit-S <0.005", "MisFit-S 0.005–0.01", "MisFit-S 0.01–0.02", "MisFit-S 0.02–0.03", "MisFit-S 0.03–0.04", "MisFit-S >0.04")
+
+# For LGD (s_het)
+shet_bins <- c(-Inf, 0.005, 0.01, 0.05, 0.1, 0.2, 0.4, Inf)
+shet_labels <- c("Shet <0.005", "Shet 0.005–0.01", "Shet 0.01–0.05", "Shet 0.05–0.1", "Shet 0.1–0.2", "Shet 0.2–0.4", "Shet >0.4")
+
+
+# Missense lookup
+mis_lookup <- data.frame(
+  functional_group = paste0("mis", seq_along(misfit_cutoffs)),
+  MisFit_upper = misfit_cutoffs
+)
+mis_lookup$MisFit_bin <- cut(
+  mis_lookup$MisFit_upper,
+  breaks = misfit_bins,
+  labels = misfit_labels,
+  right = FALSE
+)
+
+# LGD lookup
+lgd_lookup <- data.frame(
+  functional_group = paste0("lgd", seq_along(shet_cutoffs)),
+  s_het_upper = shet_cutoffs
+)
+lgd_lookup$Shet_bin <- cut(
+  lgd_lookup$s_het_upper,
+  breaks = shet_bins,
+  labels = shet_labels,
+  right = FALSE
+)
+
+h2_table_annotated <- h2_partition_table %>%
+  left_join(mis_lookup, by = "functional_group") %>%
+  left_join(lgd_lookup, by = "functional_group")
+```
+
+```{r}
+# Missense summary
+h2_mis_summary <- h2_table_annotated %>%
+  filter(grepl("^mis", functional_group)) %>%
+  group_by(MisFit_bin) %>%
+  summarize(
+    h2 = sum(h2, na.rm = TRUE),
+    n = n()
+  ) %>%
+  rename(bin = MisFit_bin)
+
+# LGD summary
+h2_lgd_summary <- h2_table_annotated %>%
+  filter(grepl("^lgd", functional_group)) %>%
+  group_by(Shet_bin) %>%
+  summarize(
+    h2 = sum(h2, na.rm = TRUE),
+    n = n()
+  ) %>%
+  rename(bin = Shet_bin)
+
+h2_summary <- rbind(h2_lgd_summary, h2_mis_summary) %>%
+  mutate(grp = ifelse(substr(bin, 1, 3) == "Mis", "Missense", "LGD"))
+h2_summary %>% knitr::kable()
+save(h2_summary, file = "~/Documents/Yufeng_Lab/BHR/final/sex_female/sex_female_summary.RData")
+```
+
+```{r}
+h2_summary$h2 %>% sum
+```
+
+```{r}
+ggplot(h2_summary, aes(x = h2, y = bin, fill = grp)) +
+  geom_bar(stat = "identity") +
+    scale_fill_manual(
+    values = c(
+      "LGD" = "#377EB8",       # bold blue
+      "Missense" = "#4DAF4A"   # strong green
+    ),
+    name = "Variant Group"     # legend title
+  ) +
+  labs(
+    x = "Estimated Heritability (h²)",
+    y = "Functional Group (by selection coefficient)",
+    title = "Partitioned h² (effect size² * frequency) for Females w/ ASD"
+  ) +
+  theme_minimal()
+```

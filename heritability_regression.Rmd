@@ -1,0 +1,337 @@
+---
+title: "heritability_regression"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    number_sections: true
+    theme: paper
+date: "2025-04-30"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(data.table)
+library(ggplot2)
+library(bhr)
+library(data.table)
+library(knitr)
+library(readxl)
+library(rcompanion)
+```
+
+## variant types
+
+```{r}
+# Define variant categories
+mis_def <- c("missense",
+             "inframe_deletion",
+             "inframe_insertion")
+
+syn_def <- c("synonymous")
+             # "synonymous&inframe_deletion&splice_acceptor",
+             # "synonymous&inframe_deletion&splice_donor",
+             # "synonymous&frameshift&splice_acceptor",
+             # "synonymous&frameshift&splice_donor",
+             # "synonymous&splice_donor",
+             # "synonymous&splice_acceptor",
+             # "synonymous&splice_acceptor&coding_sequence",
+             # "synonymous&splice_donor&coding_sequence")
+
+lgd_def <- c("frameshift",
+             "frameshift&splice_acceptor",
+             "frameshift&splice_donor",
+             "frameshift&splice_donor&start_lost",
+             "frameshift&splice_region",
+             "frameshift&start_lost",
+             "frameshift&start_lost&splice_region",
+             "frameshift&stop_retained",
+             "inframe_deletion&splice_donor",
+             "inframe_deletion&splice_region",
+             "inframe_deletion&start_lost",
+             "inframe_deletion&start_lost&splice_region",
+             "inframe_deletion&stop_retained",
+             "inframe_insertion&stop_retained",
+             "splice_acceptor",
+             "splice_acceptor&5_prime_utr",
+             "splice_acceptor&coding_sequence",
+             "splice_acceptor&splice_region",
+             "splice_donor",
+             "splice_donor&5_prime_utr",
+             "splice_donor&coding_sequence",
+             "splice_region&3_prime_utr",
+             "splice_region&5_prime_utr",
+             "splice_region&stop_retained",
+             "start_lost",
+             "start_lost&splice_region",
+             "stop_gained",
+             "stop_gained&frameshift",
+             "stop_gained&inframe_insertion",
+             "stop_gained&inframe_deletion",
+             "stop_gained&stop_retained",
+             "stop_lost",
+             "stop_lost&frameshift",
+             "stop_lost&frameshift&splice_region",
+             "stop_lost&inframe_deletion",
+             "stop_lost&splice_region",
+             "stop_retained")
+```
+
+
+## data
+
+### load misc data
+
+```{r}
+# the baseline model controls for bias introduced by selective constraint across genes.
+baseline_model <- read.table("~/Documents/Yufeng_Lab/BHR/data/ms_baseline_oe5.txt")
+
+# gene name and ensg conversions
+conversion <- fread("~/Documents/Yufeng_Lab/data/gene_ensg_conversion.tsv",  sep = "\t",  header = FALSE) %>% 
+  select(V3, V4) %>%
+  distinct()
+colnames(conversion) <- c("canon_gene", "gene_id") # c("CHROM", "POS", "gene_label", "gene_id")
+conversion$gene_id <- conversion$gene_id %>% substr(1, 15)
+
+# shet data
+shet <- read_excel("~/Documents/Yufeng_Lab/data/shet.xlsx", 
+    sheet = "Supplementary Table 1") %>%
+  rename(shet = post_mean,
+         gene_id = ensg) %>%
+  select(gene_id, shet)
+```
+
+### load case/control data
+
+```{r}
+spark <- fread("~/Documents/Yufeng_Lab/data/iWES3_RareVar_topmedAF_QCfilter_1e-4.txt", sep="\t") %>%
+  left_join(conversion, by = c("canon_gene")) %>%
+  left_join(shet, by = c("gene_id")) %>%
+  mutate(group = "case")
+Ncases <- spark$sample_id %>% unique %>% length
+```
+
+```{r}
+UKBB <- fread("~/Documents/Yufeng_Lab/data/UKBB_RareVar_topmedAF_QCfilter_1e-4.txt", sep="\t") %>%
+  left_join(conversion, by = c("canon_gene")) %>%
+  left_join(shet, by = c("gene_id")) %>%
+  mutate(group = "control")
+Ncontrols <- UKBB$sample_id %>% unique %>% length
+```
+
+```{r}
+df <- rbind(spark, UKBB)
+```
+
+
+###
+
+```{r}
+df_grouped <- df %>%
+  mutate(
+    variant_group = case_when(
+      canon_Consequence %in% mis_def & MisFit_S < 0.005                     ~ "mis_bin1",
+      canon_Consequence %in% mis_def & MisFit_S >= 0.005 & MisFit_S < 0.01 ~ "mis_bin2",
+      canon_Consequence %in% mis_def & MisFit_S >= 0.01  & MisFit_S < 0.02 ~ "mis_bin3",
+      canon_Consequence %in% mis_def & MisFit_S >= 0.02  & MisFit_S < 0.03 ~ "mis_bin4",
+      canon_Consequence %in% mis_def & MisFit_S >= 0.03  & MisFit_S < 0.04 ~ "mis_bin5",
+      canon_Consequence %in% mis_def & MisFit_S >= 0.04                    ~ "mis_bin6",
+
+      canon_Consequence %in% lgd_def & !is.na(shet) & shet < 0.005                     ~ "lgd_bin1",
+      canon_Consequence %in% lgd_def & shet >= 0.005 & shet < 0.01                    ~ "lgd_bin2",
+      canon_Consequence %in% lgd_def & shet >= 0.01  & shet < 0.05                    ~ "lgd_bin3",
+      canon_Consequence %in% lgd_def & shet >= 0.05  & shet < 0.1                     ~ "lgd_bin4",
+      canon_Consequence %in% lgd_def & shet >= 0.1   & shet < 0.2                     ~ "lgd_bin5",
+      canon_Consequence %in% lgd_def & shet >= 0.2   & shet < 0.4                     ~ "lgd_bin6",
+      canon_Consequence %in% lgd_def & shet >= 0.4                                   ~ "lgd_bin7",
+
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(variant_group))
+
+# Create subject-level burden matrix
+burden_matrix <- df_grouped %>%
+  group_by(sample_id, variant_group) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  pivot_wider(
+    names_from = variant_group,
+    values_from = count,
+    values_fill = 0
+  )
+head(burden_matrix) %>% knitr::kable()
+```
+
+### merge w/ phenotype
+
+```{r}
+phenotype <- df %>% dplyr::select(sample_id, group) %>% distinct()
+burden_with_pheno <- merge(burden_matrix, phenotype, by=c("sample_id"))
+table(burden_with_pheno$group)
+```
+
+## regression
+
+```{r}
+burden_with_pheno$iscase <- ifelse(burden_with_pheno$group == "case", 1, 0)
+```
+
+```{r}
+# Fit logistic regression model
+logit_model <- glm(
+  iscase ~ 
+    mis_bin1 + mis_bin2 + mis_bin3 + mis_bin4 + mis_bin5 + mis_bin6 +
+    lgd_bin1 + lgd_bin2 + lgd_bin3 + lgd_bin4 + lgd_bin5 + lgd_bin6 + lgd_bin7,
+  data = burden_with_pheno,
+  family = binomial()
+)
+
+# Get Nagelkerke R² using the 'rcompanion' package
+nagelkerke_r2 <- nagelkerke(logit_model)$Pseudo.R.sq["Nagelkerke (Cragg and Uhler)",]
+```
+
+## adjust by prevelance
+
+```{r}
+# Prevalence in the population (e.g., autism ~ 1 in 40)
+K <- 1/31
+
+# Case/control ratio in your sample
+P <- mean(burden_with_pheno$iscase)
+
+# Liability threshold
+z <- dnorm(qnorm(1 - K))
+
+# Conversion factor
+scaling_factor <- (K * (1 - K))^2 / (P * (1 - P) * z^2)
+
+# Convert Nagelkerke R² to liability scale h²
+h2_liability <- nagelkerke_r2 * scaling_factor
+
+cat("Nagelkerke R² (observed scale):", round(nagelkerke_r2, 4), "\n")
+cat("Liability-scale heritability h²:", round(h2_liability, 4), "\n")
+```
+
+
+## partition h2
+
+```{r}
+full_model <- glm(
+  iscase ~ 
+    mis_bin1 + mis_bin2 + mis_bin3 + mis_bin4 + mis_bin5 + mis_bin6 +
+    lgd_bin1 + lgd_bin2 + lgd_bin3 + lgd_bin4 + lgd_bin5 + lgd_bin6 + lgd_bin7,
+  data = burden_with_pheno,
+  family = binomial()
+)
+r2_full <- nagelkerke(full_model)$Pseudo.R.squared["Nagelkerke (Cragg and Uhler)",]
+
+
+predictors <- c(
+  "mis_bin1", "mis_bin2", "mis_bin3", "mis_bin4", "mis_bin5", "mis_bin6",
+  "lgd_bin1", "lgd_bin2", "lgd_bin3", "lgd_bin4", "lgd_bin5", "lgd_bin6", "lgd_bin7"
+)
+
+
+r2_results <- data.frame(
+  variable = predictors,
+  delta_r2 = NA_real_
+)
+
+# Loop through and drop each variable
+for (i in seq_along(predictors)) {
+  reduced_formula <- as.formula(
+    paste("iscase ~", paste(predictors[-i], collapse = " + "))
+  )
+  
+  reduced_model <- glm(reduced_formula, data = burden_with_pheno, family = "binomial")
+  r2_reduced <- nagelkerke(reduced_model)$Pseudo.R.squared["Nagelkerke (Cragg and Uhler)",]
+  
+  r2_results$delta_r2[i] <- r2_full - r2_reduced
+}
+
+# sort and print results
+r2_results <- r2_results[order(-r2_results$delta_r2), ]
+print(r2_results)
+```
+
+### adjust by prevalence = 1/31
+
+```{r}
+# define population prevalence
+K <- 1/31  # ASD prevalence
+
+# sample prevalence
+P <- mean(burden_with_pheno$iscase)
+
+# compute z-score threshold and height of standard normal at threshold
+tau <- qnorm(1 - K)
+z <- dnorm(tau)
+
+# compute liability scale conversion factor
+lia_scaling_factor <- (K^2 * (1 - K)^2) / (z^2 * P * (1 - P))
+
+# apply to each delta_r2
+r2_results$h2_liability <- r2_results$delta_r2 * lia_scaling_factor
+
+# View
+print(r2_results)
+sum(r2_results$h2_liability)
+```
+
+
+
+```{r}
+r2_results <- r2_results %>%
+  mutate(label = case_when(
+    variable == "mis_bin1" ~ "MisFit <0.005",
+    variable == "mis_bin2" ~ "MisFit 0.005–0.01",
+    variable == "mis_bin3" ~ "MisFit 0.01–0.02",
+    variable == "mis_bin4" ~ "MisFit 0.02–0.03",
+    variable == "mis_bin5" ~ "MisFit 0.03–0.04",
+    variable == "mis_bin6" ~ "MisFit >0.04",
+
+    variable == "lgd_bin1" ~ "Shet <0.005",
+    variable == "lgd_bin2" ~ "Shet 0.005–0.01",
+    variable == "lgd_bin3" ~ "Shet 0.01–0.05",
+    variable == "lgd_bin4" ~ "Shet 0.05–0.1",
+    variable == "lgd_bin5" ~ "Shet 0.1–0.2",
+    variable == "lgd_bin6" ~ "Shet 0.2–0.4",
+    variable == "lgd_bin7" ~ "Shet >0.4"
+  )) %>%
+  mutate(grp = ifelse(substr(label, 1, 3) == "Mis", "Missense", "LGD"))
+
+label_order <- c(
+  "Shet <0.005", "Shet 0.005–0.01", "Shet 0.01–0.05",
+  "Shet 0.05–0.1", "Shet 0.1–0.2", "Shet 0.2–0.4", "Shet >0.4",
+  "MisFit <0.005", "MisFit 0.005–0.01", "MisFit 0.01–0.02",
+  "MisFit 0.02–0.03", "MisFit 0.03–0.04", "MisFit >0.04"
+)
+
+r2_results$label <- factor(r2_results$label, levels = label_order)
+r2_results %>%  knitr::kable()
+```
+
+```{r}
+r2_results %>% pull(h2_liability) %>% sum
+```
+
+```{r}
+ggplot(r2_results, aes(x = h2_liability, y = label, fill = grp)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(
+    values = c(
+      "LGD" = "#377EB8",       # bold blue
+      "Missense" = "#4DAF4A"   # strong green
+    ),
+    name = "Variant Group"     # legend title
+  ) +
+  labs(
+    x = "Estimated Heritability (h²)",
+    y = "Functional Group",
+    title = "Partitioned Heritability (Regression)"
+  ) +
+  theme_minimal()
+```

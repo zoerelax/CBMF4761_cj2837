@@ -1,0 +1,101 @@
+---
+title: "final_figure"
+output: html_document
+date: "2025-05-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(patchwork)
+library(ggplot2)
+```
+
+## sex
+
+```{r}
+load("~/Documents/Yufeng_Lab/BHR/final/sex_female/sex_female_summary.RData")
+female_summary <- h2_summary %>% mutate(Sex = "Female")
+load("~/Documents/Yufeng_Lab/BHR/final/sex_male/sex_male_summary.RData")
+male_summary <- h2_summary %>% mutate(Sex = "Male")
+df <- rbind(female_summary, male_summary)
+```
+
+```{r}
+p1 <- ggplot(df, aes(x = h2, y = bin, fill = grp)) +
+    facet_wrap(~Sex) +
+  geom_bar(stat = "identity") +
+    scale_fill_manual(
+    values = c(
+      "LGD" = "#377EB8",       # bold blue
+      "Missense" = "#4DAF4A"   # strong green
+    ),
+    name = "Variant Group"     # legend title
+  ) +
+  labs(
+    x = "Estimated Heritability (h²)",
+    y = "Functional Group",
+    title = "Partitioned h² for Females vs. Males"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+h2_wide <- df %>%
+  select(bin, h2, Sex) %>%
+  pivot_wider(
+    names_from = Sex,
+    values_from = h2
+  )
+h2_wide %>% arrange(desc(bin)) %>% knitr::kable()
+```
+
+## family structure
+
+```{r}
+load("~/Documents/Yufeng_Lab/BHR/final/simplex/simplex_summary.RData")
+simplex_summary <- h2_summary %>% mutate(Family = "Simplex")
+load("~/Documents/Yufeng_Lab/BHR/final/multiplex/multiplex_summary.RData")
+multiplex_summary <- h2_summary %>% mutate(Family = "Multiplex")
+df <- rbind(simplex_summary, multiplex_summary)
+```
+
+```{r fig.width=8, fig.height=6}
+p2 <- ggplot(df, aes(x = h2, y = bin, fill = grp)) +
+  facet_wrap(~Family) +
+  geom_bar(stat = "identity") +
+    scale_fill_manual(
+    values = c(
+      "LGD" = "#377EB8",       # bold blue
+      "Missense" = "#4DAF4A"   # strong green
+    ),
+    name = "Variant Group"     # legend title
+  ) +
+  labs(
+    x = "Estimated Heritability (h²)",
+    y = "Functional Group",
+    title = "Partitioned h² for Simplex vs. Multiplex"
+  ) +
+  theme_minimal()
+```
+
+
+
+```{r}
+h2_wide <- df %>%
+  select(bin, h2, Family) %>%
+  pivot_wider(
+    names_from = Family,
+    values_from = h2
+  )
+h2_wide %>% arrange(desc(bin)) %>% knitr::kable()
+```
+
+## combine plots
+
+```{r fig.height=8, fig.width=6}
+combined_plot <- p1 / p2 + 
+  plot_annotation(tag_levels = 'A')  # Adds labels A, B
+combined_plot
+```
